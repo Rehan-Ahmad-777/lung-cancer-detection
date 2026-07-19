@@ -156,6 +156,11 @@ ct_model, histo_model = load_models()
 CT_CLASSES = ["Benign", "Malignant", "Normal"]
 HISTO_CLASSES = ["Adenocarcinoma", "Benign", "Squamous Cell Carcinoma"]
  
+# Classes that represent a non-cancerous / negative finding.
+# Anything predicted that is NOT in this set is treated as a
+# cancer-positive finding for risk-labeling purposes.
+NON_CANCEROUS_CLASSES = {"Benign", "Normal"}
+ 
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
@@ -168,15 +173,23 @@ def preprocess_image(image):
     return image
  
  
-def get_risk(confidence):
-    if confidence >= 90:
-        return "🔴 Very High"
-    elif confidence >= 75:
-        return "🟠 High"
-    elif confidence >= 60:
-        return "🟡 Moderate"
+def get_risk(predicted_class, confidence):
+    is_cancerous_prediction = predicted_class not in NON_CANCEROUS_CLASSES
+ 
+    if is_cancerous_prediction:
+        if confidence >= 85:
+            return "🔴 High Confidence — Cancerous Finding", "error"
+        elif confidence >= 60:
+            return "🟠 Moderate Confidence — Cancerous Finding, Recommend Review", "warning"
+        else:
+            return "🟡 Low Confidence — Inconclusive, Needs Expert Review", "warning"
     else:
-        return "🟢 Low"
+        if confidence >= 85:
+            return "🟢 High Confidence — Likely Non-Cancerous", "success"
+        elif confidence >= 60:
+            return "🟡 Moderate Confidence — Likely Non-Cancerous, Recommend Review", "info"
+        else:
+            return "🟠 Low Confidence — Inconclusive, Needs Expert Review", "warning"
  
  
 def predict_image(image, model_type):
@@ -314,16 +327,22 @@ if predict:
  
         st.markdown("---")
  
-        risk = get_risk(confidence)
+        risk_message, risk_style = get_risk(predicted_class, confidence)
  
-        if "Very High" in risk:
-            st.error(risk)
-        elif "High" in risk:
-            st.warning(risk)
-        elif "Moderate" in risk:
-            st.info(risk)
+        if risk_style == "error":
+            st.error(risk_message)
+        elif risk_style == "warning":
+            st.warning(risk_message)
+        elif risk_style == "info":
+            st.info(risk_message)
         else:
-            st.success(risk)
+            st.success(risk_message)
+ 
+        st.caption(
+            "This confidence score reflects how certain the model is, not a medical "
+            "diagnosis. Scores below ~85% should always be reviewed by a qualified "
+            "professional before drawing any conclusion."
+        )
  
         st.markdown("## Probability Distribution")
  
@@ -372,4 +391,3 @@ Framework : TensorFlow
  
 st.markdown("---")
 st.caption("AI Lung Cancer Detection System | ResNet50 | TensorFlow | Streamlit")
- 
